@@ -1,15 +1,14 @@
-import mixer
 import random
 import pygame
 import sys
 
 pygame.init()
-mixer.init()
+pygame.mixer.init()
 
-mixer.music.load('space.ogg')
-mixer.music.play(-1, 0.0)
-fire_sound = mixer.Sound('fire.ogg')
-explosion_sound = mixer.Sound('8-bit-explosion_F.wav')
+pygame.mixer.music.load('space.ogg')
+pygame.mixer.music.play(-1, 0.0)
+fire_sound = pygame.mixer.Sound('fire.ogg')
+explosion_sound = pygame.mixer.Sound('8-bit-explosion_F.wav')
 
 screen = pygame.display.set_mode((700, 500))
 pygame.display.set_caption("SPACE_SHOOTER")
