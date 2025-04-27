@@ -1,0 +1,26 @@
+{
+    "theme": "Dark",
+    "window_geometry": {
+        "x": 0,
+        "y": 34,
+        "width": 1920,
+        "height": 986
+    },
+    "last_tasks": [
+        {
+            "completed": false,
+            "description": "",
+            "priority": "Високий",
+            "tags": [
+                "тест"
+            ],
+            "text": "тест",
+            "time": "14:20"
+        }
+    ],
+    "font": {
+        "family": "Arial",
+        "size": 12
+    },
+    "language": "uk"
+}

@@ -1,213 +1,358 @@
-import random
-import pygame
 import sys
+import os
+import json
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout,
+    QPushButton, QLineEdit, QListWidget, QListWidgetItem,
+    QTimeEdit, QLabel, QTextEdit, QComboBox
+)
+from PyQt5.QtGui import QFont, QBrush, QColor
+from PyQt5.QtCore import Qt, QTime
 
-pygame.init()
-pygame.mixer.init()
+CONFIG_FILE = 'config.json'
 
-pygame.mixer.music.load('space.ogg')
-pygame.mixer.music.play(-1, 0.0)
-fire_sound = pygame.mixer.Sound('fire.ogg')
-explosion_sound = pygame.mixer.Sound('8-bit-explosion_F.wav')
+# Кольорові стилі для світлої та темної тем:
+light_stylesheet = """
+QWidget {
+    background-color: #f0f8ff;
+    color: #333333;
+}
+QPushButton {
+    background-color: #87cefa;
+    color: #333333;
+    border: 1px solid #1e90ff;
+    border-radius: 5px;
+    padding: 5px;
+}
+QLineEdit, QComboBox {
+    background-color: white;
+    color: #333333;
+    border: 1px solid #1e90ff;
+    border-radius: 3px;
+    padding: 2px;
+}
+QListWidget {
+    background-color: white;
+    color: #333333;
+    border: 1px solid #1e90ff;
+    border-radius: 3px;
+}
+"""
 
-screen = pygame.display.set_mode((700, 500))
-pygame.display.set_caption("SPACE_SHOOTER")
+dark_stylesheet = """
+QWidget {
+    background-color: #2c3e50;
+    color: #ecf0f1;
+}
+QPushButton {
+    background-color: #34495e;
+    color: #ecf0f1;
+    border: 1px solid #2980b9;
+    border-radius: 5px;
+    padding: 5px;
+}
+QLineEdit, QComboBox {
+    background-color: #3c556e;
+    color: #ecf0f1;
+    border: 1px solid #2980b9;
+    border-radius: 3px;
+    padding: 2px;
+}
+QListWidget {
+    background-color: #34495e;
+    color: #ecf0f1;
+    border: 1px solid #2980b9;
+    border-radius: 3px;
+}
+"""
 
-WHITE = (255, 255, 255)
-RED   = (255, 0, 0)
-GREEN = (0, 255, 0)
+# Налаштування за замовчуванням
+DEFAULT_CONFIG = {
+    "theme": "Light",
+    "window_geometry": {
+        "x": 100,
+        "y": 100,
+        "width": 500,
+        "height": 600
+    },
+    "last_tasks": [],
+    "font": {
+        "family": "Arial",
+        "size": 12
+    },
+    "language": "uk"
+}
 
-img_back = "galaxy.jpg"
-img_hero = "rocket.png"
-img_bullet = "bullet.png"
-img_enemy = "ufo.png"
-img_explosion = "explosion.png"
-img_meteor = "asteroid.png" 
+# Віджет для одного завдання, який відображає текст, час, приорітет і теги
+class TaskWidget(QWidget):
+    def __init__(self, text, deadline, completed=False, priority="Середній", tags=None, parent=None):
+        super().__init__(parent)
+        self.text = text
+        self.deadline = deadline
+        self.completed = completed
+        self.priority = priority
+        self.tags = tags if tags is not None else []
+        self.init_ui()
 
-background = pygame.image.load(img_back)
-hero_img = pygame.image.load(img_hero)
-bullet_img = pygame.image.load(img_bullet)
-enemy_img = pygame.image.load(img_enemy)
-explosion_img = pygame.image.load(img_explosion)
-meteor_img = pygame.image.load(img_meteor)
+    def init_ui(self):
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        # Формуємо текст для відображення інформації: текст, час, приорітет і теги (якщо є)
+        info_text = f"{self.text} [{self.deadline}] (Приоритет: {self.priority})"
+        if self.tags:
+            info_text += " Теги: " + ", ".join(self.tags)
+        self.label_main = QLabel(info_text)
+        font_main = self.label_main.font()
+        font_main.setPointSize(12)
+        font_main.setStrikeOut(self.completed)
+        self.label_main.setFont(font_main)
+        # Більш маленький напис "виконано", який відображається, якщо завдання виконане
+        self.label_done = QLabel("виконано")
+        font_done = QFont(self.label_done.font())
+        font_done.setPointSize(8)
+        self.label_done.setFont(font_done)
+        self.label_done.setStyleSheet("color: green;")
+        self.label_done.setVisible(self.completed)
+        layout.addWidget(self.label_main)
+        layout.addWidget(self.label_done)
+        layout.addStretch()
+        self.setLayout(layout)
+    
+    def update_widget(self, text, deadline, completed, priority, tags):
+        self.text = text
+        self.deadline = deadline
+        self.completed = completed
+        self.priority = priority
+        self.tags = tags
+        info_text = f"{self.text} [{self.deadline}] (Приоритет: {self.priority})"
+        if self.tags:
+            info_text += " Теги: " + ", ".join(self.tags)
+        self.label_main.setText(info_text)
+        font_main = self.label_main.font()
+        font_main.setStrikeOut(self.completed)
+        self.label_main.setFont(font_main)
+        self.label_done.setVisible(self.completed)
 
-background = pygame.transform.scale(background, (700, 500))
-hero_img = pygame.transform.scale(hero_img, (50, 50))
-bullet_img = pygame.transform.scale(bullet_img, (10, 20))
-enemy_img = pygame.transform.scale(enemy_img, (40, 40))
-explosion_img = pygame.transform.scale(explosion_img, (30, 30))
-meteor_img = pygame.transform.scale(meteor_img, (40, 40))
-
-clock = pygame.time.Clock()
-
-def main_menu():
-    menu = True
-    while menu:
-        screen.blit(background, (0, 0))
-
-        font_title = pygame.font.Font(None, 72)
-        title_text = font_title.render("SPACE SHOOTER", True, WHITE)
-        screen.blit(title_text, (700 // 2 - title_text.get_width() // 2, 150))
-
-        button_rect = pygame.Rect(0, 0, 200, 60)
-        button_rect.center = (700 // 2, 350)
-        pygame.draw.rect(screen, GREEN, button_rect)
-        font_button = pygame.font.Font(None, 36)
-        button_text = font_button.render("START", True, WHITE)
-        screen.blit(button_text, (button_rect.centerx - button_text.get_width() // 2,
-                                    button_rect.centery - button_text.get_height() // 2))
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if button_rect.collidepoint(event.pos):
-                    menu = False
-        pygame.display.flip()
-        clock.tick(60)
-
-main_menu()
-
-class Player(pygame.sprite.Sprite):
+class ToDoApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.image = hero_img
-        self.rect = self.image.get_rect(center=(700 // 2, 500 - 50))
+        self.config = DEFAULT_CONFIG.copy()
+        self.load_settings()
+        self.current_theme = self.config.get("theme", "Light")
+        geom = self.config.get("window_geometry", DEFAULT_CONFIG["window_geometry"])
+        self.setGeometry(geom.get("x", 100), geom.get("y", 100),
+                         geom.get("width", 500), geom.get("height", 600))
+        font_config = self.config.get("font", DEFAULT_CONFIG["font"])
+        font = QFont(font_config.get("family", "Arial"), font_config.get("size", 12))
+        self.setFont(font)
+        self.setWindowTitle("Топовий To‑Do List")
+        self.init_ui()
+        self.apply_theme()
 
-    def update(self):
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT] and self.rect.left > 0:
-            self.rect.x -= 5
-        if keys[pygame.K_RIGHT] and self.rect.right < 700:
-            self.rect.x += 5
+    def init_ui(self):
+        layout = QVBoxLayout()
 
-class Enemy(pygame.sprite.Sprite):
-    def __init__(self):
-        super().__init__()
-        self.image = enemy_img
-        self.rect = self.image.get_rect(center=(random.randint(20, 700 - 20), 0))
-        self.speed = random.randint(3, 6)
+        # Рядок у верхньому правому куті для вибору теми (емодзі)
+        theme_layout = QHBoxLayout()
+        theme_layout.setContentsMargins(0, 0, 0, 0)
+        theme_layout.setAlignment(Qt.AlignRight)
+        self.light_button = QPushButton("☀️")
+        self.light_button.setFixedSize(30, 30)
+        self.light_button.clicked.connect(lambda: self.change_theme("Light"))
+        self.dark_button = QPushButton("🌙")
+        self.dark_button.setFixedSize(30, 30)
+        self.dark_button.clicked.connect(lambda: self.change_theme("Dark"))
+        theme_layout.addWidget(self.light_button)
+        theme_layout.addWidget(self.dark_button)
+        layout.addLayout(theme_layout)
 
-    def update(self):
-        self.rect.y += self.speed
-        if self.rect.top > 500:
-            self.kill()
-            global missed_enemies
-            missed_enemies += 1
+        # Розклад для введення завдання, вибору часу, приорітету та тегів
+        input_layout = QHBoxLayout()
+        self.task_input = QLineEdit()
+        self.task_input.setPlaceholderText("Введіть завдання")
+        self.time_input = QTimeEdit()
+        self.time_input.setDisplayFormat("HH:mm")
+        self.time_input.setTime(QTime.currentTime())
+        self.priority_box = QComboBox()
+        self.priority_box.addItems(["Високий", "Середній", "Низький"])
+        self.priority_box.setCurrentText("Середній")
+        self.tags_input = QLineEdit()
+        self.tags_input.setPlaceholderText("Теги (через кому)")
+        self.add_button = QPushButton("Додати")
+        self.add_button.clicked.connect(self.add_task)
+        input_layout.addWidget(self.task_input)
+        input_layout.addWidget(self.time_input)
+        input_layout.addWidget(self.priority_box)
+        input_layout.addWidget(self.tags_input)
+        input_layout.addWidget(self.add_button)
 
-class Meteor(pygame.sprite.Sprite):
-    def __init__(self):
-        super().__init__()
-        self.image = meteor_img.copy()
-        self.orig_image = self.image
-        self.rect = self.image.get_rect(center=(random.randint(20, 700 - 20), 0))
-        self.speed = random.randint(4, 7)
-        self.angle = 0
-        self.rotation_speed = random.randint(-3, 3)
+        # Список завдань
+        self.task_list = QListWidget()
+        self.task_list.itemDoubleClicked.connect(self.toggle_task_done)
+        self.task_list.currentItemChanged.connect(self.on_task_selection_changed)
+        # Завантаження збережених завдань із параметрами
+        for task in self.config.get("last_tasks", []):
+            if isinstance(task, dict):
+                text = task.get("text", "")
+                completed = task.get("completed", False)
+                deadline = task.get("time", "")
+                description = task.get("description", "")
+                priority = task.get("priority", "Середній")
+                tags = task.get("tags", [])
+            else:  # для сумісності
+                text = task
+                completed = False
+                deadline = ""
+                description = ""
+                priority = "Середній"
+                tags = []
+            self.add_task_item(text, deadline, completed, description, priority, tags)
 
-    def update(self):
-        self.rect.y += self.speed
-        self.angle = (self.angle + self.rotation_speed) % 360
-        self.image = pygame.transform.rotate(self.orig_image, self.angle)
-        self.rect = self.image.get_rect(center=self.rect.center)
-        if self.rect.top > 500:
-            self.kill()
+        # Розклад для кнопок управління завданнями
+        controls_layout = QHBoxLayout()
+        self.delete_button = QPushButton("Видалити вибране")
+        self.delete_button.clicked.connect(self.delete_selected)
+        self.clear_completed_button = QPushButton("Очистити виконані")
+        self.clear_completed_button.clicked.connect(self.clear_completed)
+        controls_layout.addWidget(self.delete_button)
+        controls_layout.addWidget(self.clear_completed_button)
 
-class Bullet(pygame.sprite.Sprite):
-    def __init__(self, x, y):
-        super().__init__()
-        self.image = bullet_img
-        self.rect = self.image.get_rect(center=(x, y))
+        # Блок для редагування детального опису завдання
+        description_label = QLabel("Опис:")
+        self.description_edit = QTextEdit()
+        self.description_edit.setPlaceholderText("Введіть докладний опис завдання...")
+        self.description_edit.setFixedHeight(100)
+        self.description_edit.textChanged.connect(self.update_current_task_description)
 
-    def update(self):
-        self.rect.y -= 7
-        if self.rect.bottom < 0:
-            self.kill()
+        layout.addLayout(input_layout)
+        layout.addWidget(self.task_list)
+        layout.addLayout(controls_layout)
+        layout.addWidget(description_label)
+        layout.addWidget(self.description_edit)
 
-class Explosion(pygame.sprite.Sprite):
-    def __init__(self, x, y):
-        super().__init__()
-        self.image = explosion_img
-        self.rect = self.image.get_rect(center=(x, y))
+        self.setLayout(layout)
 
-    def update(self):
-        self.kill()
+    def add_task(self):
+        text = self.task_input.text().strip()
+        deadline = self.time_input.time().toString("HH:mm")
+        priority = self.priority_box.currentText()
+        tags_str = self.tags_input.text().strip()
+        tags = [t.strip() for t in tags_str.split(",")] if tags_str else []
+        if text:
+            self.add_task_item(text, deadline, completed=False, description="", priority=priority, tags=tags)
+            self.task_input.clear()
+            self.tags_input.clear()
 
-player = Player()
-all_sprites = pygame.sprite.Group()
-all_sprites.add(player)
+    def add_task_item(self, text, deadline, completed=False, description="", priority="Середній", tags=None):
+        if tags is None:
+            tags = []
+        item = QListWidgetItem()
+        task = {
+            "text": text,
+            "time": deadline,
+            "completed": completed,
+            "description": description,
+            "priority": priority,
+            "tags": tags
+        }
+        item.setData(Qt.UserRole, task)
+        self.task_list.addItem(item)
+        widget = TaskWidget(text, deadline, completed, priority, tags)
+        self.task_list.setItemWidget(item, widget)
 
-enemies = pygame.sprite.Group()
-meteors = pygame.sprite.Group() 
-bullets = pygame.sprite.Group()
-explosions = pygame.sprite.Group()
+    def toggle_task_done(self, item):
+        task = item.data(Qt.UserRole)
+        task["completed"] = not task.get("completed", False)
+        item.setData(Qt.UserRole, task)
+        widget = self.task_list.itemWidget(item)
+        if widget is not None and isinstance(widget, TaskWidget):
+            widget.update_widget(task["text"], task["time"], task["completed"], task.get("priority", "Середній"), task.get("tags", []))
+        self.save_settings()
 
-running = True
-score = 0
-missed_enemies = 0
+    def on_task_selection_changed(self, current, previous):
+        if current is not None:
+            task = current.data(Qt.UserRole)
+            self.description_edit.blockSignals(True)
+            self.description_edit.setPlainText(task.get("description", ""))
+            self.description_edit.blockSignals(False)
+        else:
+            self.description_edit.blockSignals(True)
+            self.description_edit.clear()
+            self.description_edit.blockSignals(False)
 
-while running:
-    clock.tick(60)
-    screen.blit(background, (0, 0))
+    def update_current_task_description(self):
+        current = self.task_list.currentItem()
+        if current is not None:
+            task = current.data(Qt.UserRole)
+            task["description"] = self.description_edit.toPlainText()
+            current.setData(Qt.UserRole, task)
+            self.save_settings()
 
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-            new_bullet = Bullet(player.rect.centerx, player.rect.top)
-            all_sprites.add(new_bullet)
-            bullets.add(new_bullet)
-            fire_sound.play()
+    def delete_selected(self):
+        for item in self.task_list.selectedItems():
+            row = self.task_list.row(item)
+            self.task_list.takeItem(row)
+        self.save_settings()
 
-    if random.randint(1, 40) == 1:
-        new_enemy = Enemy()
-        all_sprites.add(new_enemy)
-        enemies.add(new_enemy)
+    def clear_completed(self):
+        for i in range(self.task_list.count() - 1, -1, -1):
+            item = self.task_list.item(i)
+            task = item.data(Qt.UserRole)
+            if task.get("completed", False):
+                self.task_list.takeItem(i)
+        self.save_settings()
 
-    if random.randint(1, 80) == 1:
-        new_meteor = Meteor()
-        all_sprites.add(new_meteor)
-        meteors.add(new_meteor)
+    def change_theme(self, theme):
+        self.current_theme = theme
+        self.config["theme"] = theme
+        self.apply_theme()
+        self.save_settings()
 
-    all_sprites.update()
+    def apply_theme(self):
+        if self.current_theme == "Light":
+            QApplication.instance().setStyleSheet(light_stylesheet)
+        elif self.current_theme == "Dark":
+            QApplication.instance().setStyleSheet(dark_stylesheet)
 
-    for bullet in bullets:
-        enemy_hits = pygame.sprite.spritecollide(bullet, enemies, True)
-        if enemy_hits:
-            bullet.kill()
-            score += 1
-            explosion_sound.play()
-            exp = Explosion(enemy_hits[0].rect.centerx, enemy_hits[0].rect.centery)
-            all_sprites.add(exp)
-            explosions.add(exp)
-            continue
-        meteor_hits = pygame.sprite.spritecollide(bullet, meteors, True)
-        if meteor_hits:
-            bullet.kill()
-            explosion_sound.play()
-            exp = Explosion(meteor_hits[0].rect.centerx, meteor_hits[0].rect.centery)
-            all_sprites.add(exp)
-            explosions.add(exp)
+    def save_settings(self):
+        geom = self.geometry()
+        self.config["window_geometry"] = {
+            "x": geom.x(),
+            "y": geom.y(),
+            "width": geom.width(),
+            "height": geom.height()
+        }
+        tasks = []
+        for i in range(self.task_list.count()):
+            item = self.task_list.item(i)
+            task = item.data(Qt.UserRole)
+            tasks.append(task)
+        self.config["last_tasks"] = tasks
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(self.config, f, ensure_ascii=False, indent=4)
 
-    all_sprites.draw(screen)
+    def load_settings(self):
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+                    if content:
+                        loaded_config = json.loads(content)
+                        self.config.update(loaded_config)
+            except (json.JSONDecodeError, IOError):
+                self.config = DEFAULT_CONFIG.copy()
+                self.save_settings()
+        else:
+            self.config = DEFAULT_CONFIG.copy()
+            self.save_settings()
 
-    font = pygame.font.Font(None, 36)
-    text = font.render(f"Рахунок: {score} | Пропущено: {missed_enemies}", True, WHITE)
-    screen.blit(text, (10, 10))
+    def closeEvent(self, event):
+        self.save_settings()
+        event.accept()
 
-    if score >= 30:
-        win_text = font.render("ВИГРАВ!", True, GREEN)
-        screen.blit(win_text, (700 // 2 - 50, 500 // 2))
-        pygame.display.flip()
-        pygame.time.delay(2000)
-        running = False
-    if missed_enemies >= 5:
-        lose_text = font.render("ПРОГРАВ!", True, RED)
-        screen.blit(lose_text, (700 // 2 - 50, 500 // 2))
-        pygame.display.flip()
-        pygame.time.delay(2000)
-        running = False
 
-    pygame.display.flip()
-
-pygame.quit()
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = ToDoApp()
+    window.show()
+    sys.exit(app.exec_())
