@@ -1,5 +1,5 @@
 {
-    "theme": "Dark",
+    "theme": "Light",
     "window_geometry": {
         "x": 0,
         "y": 34,
@@ -8,14 +8,22 @@
     },
     "last_tasks": [
         {
+            "completed": true,
+            "description": "сделатю френч",
+            "priority": "Високий",
+            "tags": [
+                "красота"
+            ],
+            "text": "сделать маникюр",
+            "time": "15:00"
+        },
+        {
             "completed": false,
             "description": "",
             "priority": "Високий",
-            "tags": [
-                "тест"
-            ],
+            "tags": [],
             "text": "тест",
-            "time": "14:20"
+            "time": "15:00"
         }
     ],
     "font": {
